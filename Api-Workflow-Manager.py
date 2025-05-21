@@ -7,7 +7,7 @@ from javax.swing import (
 from javax.swing.table import DefaultTableModel
 from java.awt import BorderLayout, Dimension
 import csv
-from burp import SwingUtils
+
 
 class ReorderableTableModel(DefaultTableModel):
     def moveRow(self, start, end, to):
