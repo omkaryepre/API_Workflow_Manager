@@ -7,6 +7,7 @@ from javax.swing import (
 from javax.swing.table import DefaultTableModel
 from java.awt import BorderLayout, Dimension
 import csv
+import codecs
 
 
 class ReorderableTableModel(DefaultTableModel):
@@ -232,13 +233,15 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                     writer.writerow([""] * 7)
                     sr_no = 1
                     for method, url, params in self.filtered_rows:
-                        if url == "" and not params:  # Workflow row
+                        # params here should already be filtered, but if not, filter them:
+                        filtered_params = [p for p in params if getattr(p, 'getType', lambda: None)() != 2] if params and hasattr(params[0], 'getType') else params
+                        if url == "" and not filtered_params:  # Workflow row
                             writer.writerow(["", method, "", "", "", "", ""])
                             writer.writerow([""] * 7)
                         else:
                             api_line = "{} {}".format(method, url)
                             writer.writerow([str(sr_no), api_line, ""] + [""] * 4)
-                            for pname in params:
+                            for pname in filtered_params:
                                 writer.writerow(["", "", pname] + [""] * 4)
                             writer.writerow([""] * 7)
                             sr_no += 1
@@ -262,7 +265,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                             content = method
                         else:
                             content = "curl -i -s -k -X '{}' '{}'".format(method, url)
-                        f.write("####\n{}\n".format(content))
+                        f.write(u"####\n{}\n".format(content))
                     f.write("####\n")  # Only one closing block at the end
                 JOptionPane.showMessageDialog(None, "cURL commands exported to: {}".format(file_path))
             except Exception as e:
@@ -275,21 +278,19 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             JOptionPane.showMessageDialog(None, "No HTTP requests selected.")
             return
 
-        seen = set((row[0], row[1], tuple(row[2])) for row in self.api_rows)
+        # seen = set((row[0], row[1], tuple(row[2])) for row in self.api_rows)
         new_methods = set()
         for message in messages:
             try:
-                req_info = self._helpers.analyzeRequest(message)
-                url = req_info.getUrl()
-                method = req_info.getMethod()
-                params = req_info.getParameters()
-                param_names = sorted(set(p.getName() for p in params))
-                key = (method, url.toString(), tuple(param_names))
-                if key in seen:
-                    continue
-                seen.add(key)
-                self.api_rows.append([method, url.toString(), param_names])
-                new_methods.add(method)
+                   req_info = self._helpers.analyzeRequest(message)
+                   url = req_info.getUrl()
+                   method = req_info.getMethod()
+                   params = req_info.getParameters()
+                   param_names = sorted(set(
+    p.getName() for p in params if p.getType() != 2  # 2 = IParameter.PARAM_COOKIE
+))
+                   self.api_rows.append([method, url.toString(), param_names])
+                   new_methods.add(method)
             except Exception as e:
                 self._callbacks.printOutput("Error: " + str(e))
         if new_methods:
@@ -316,9 +317,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         if not file_path.endswith(".csv"):
             file_path += ".csv"
 
-        seen = set()
         rows = []
-
         rows.append([
             "SR.NO.", "API", "Parameters",
             "Attack tried", "Steps/procedure",
@@ -334,13 +333,8 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                 method = req_info.getMethod()
                 params = req_info.getParameters()
 
-                key = (method, url.getProtocol(), url.getHost(), url.getPath(), tuple(sorted(p.getName() for p in params)))
-                if key in seen:
-                    continue
-                seen.add(key)
-
                 api_line = "{} {}".format(method, url.toString())
-                param_names = sorted(set(p.getName() for p in params))
+                param_names = sorted(set(p.getName() for p in params if p.getType() != 2))  # Exclude cookies
 
                 rows.append([str(sr_no), api_line, ""] + [""] * 4)
                 for pname in param_names:
@@ -352,9 +346,10 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                 self._callbacks.printOutput("Error: " + str(e))
 
         try:
-            with open(file_path, "wb") as f:
+            with codecs.open(file_path, "w", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerows(rows)
+                for row in rows:
+                    writer.writerow([unicode(col).encode("utf-8") if isinstance(col, unicode) else str(col) for col in row])
             JOptionPane.showMessageDialog(None, "Exported successfully to:\n" + file_path)
         except Exception as e:
             JOptionPane.showMessageDialog(None, "Write error:\n" + str(e))
