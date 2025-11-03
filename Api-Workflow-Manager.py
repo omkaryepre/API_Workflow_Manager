@@ -2,12 +2,11 @@ from burp import IBurpExtender, IContextMenuFactory, ITab
 from java.util import ArrayList
 from javax.swing import (
     JMenuItem, JFileChooser, JOptionPane, JPanel, JScrollPane, JTable,
-    JButton, JComboBox, BoxLayout, Box, JLabel, ListSelectionModel
+    JButton, JComboBox, BoxLayout, Box, JLabel, ListSelectionModel, JCheckBox
 )
 from javax.swing.table import DefaultTableModel
 from java.awt import BorderLayout, Dimension
 import csv
-import codecs
 
 
 class ReorderableTableModel(DefaultTableModel):
@@ -30,6 +29,9 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self.filtered_rows = []
         self.methods = set()
         self.selected_method = "ALL"
+        
+        # Duplicate control settings
+        self.allow_duplicates = True  # Default to allowing duplicates
 
         self._init_tab()
         self._callbacks.registerContextMenuFactory(self)
@@ -55,7 +57,11 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._main_panel = JPanel(BorderLayout())
         self._main_panel.setPreferredSize(Dimension(950, 420))
 
-        # Top: Filter
+        # Top: Filter and Duplicate Control
+        top_panel = JPanel()
+        top_panel.setLayout(BoxLayout(top_panel, BoxLayout.Y_AXIS))
+        
+        # Filter panel
         filter_panel = JPanel()
         filter_panel.setLayout(BoxLayout(filter_panel, BoxLayout.X_AXIS))
         filter_panel.add(Box.createHorizontalStrut(10))
@@ -68,6 +74,19 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         filter_panel.add(self.method_filter)
         filter_panel.add(Box.createHorizontalGlue())
         filter_panel.setMaximumSize(Dimension(1000, 40))
+        
+        # Duplicate control panel
+        duplicate_panel = JPanel()
+        duplicate_panel.setLayout(BoxLayout(duplicate_panel, BoxLayout.X_AXIS))
+        duplicate_panel.add(Box.createHorizontalStrut(10))
+        self.duplicate_checkbox = JCheckBox("Allow duplicate APIs", self.allow_duplicates)
+        self.duplicate_checkbox.addActionListener(self._duplicate_setting_changed)
+        duplicate_panel.add(self.duplicate_checkbox)
+        duplicate_panel.add(Box.createHorizontalGlue())
+        duplicate_panel.setMaximumSize(Dimension(1000, 30))
+        
+        top_panel.add(filter_panel)
+        top_panel.add(duplicate_panel)
 
         # Center: Table
         self.table_model = ReorderableTableModel(
@@ -124,8 +143,29 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         center_panel.add(scroll, BorderLayout.CENTER)
         center_panel.add(button_panel, BorderLayout.EAST)
 
-        self._main_panel.add(filter_panel, BorderLayout.NORTH)
+        self._main_panel.add(top_panel, BorderLayout.NORTH)
         self._main_panel.add(center_panel, BorderLayout.CENTER)
+
+    # --- Duplicate Control ---
+    def _duplicate_setting_changed(self, event):
+        self.allow_duplicates = self.duplicate_checkbox.isSelected()
+        self._callbacks.printOutput("Duplicate setting changed: {}".format("Allowed" if self.allow_duplicates else "Filtered"))
+
+    def _is_duplicate_api(self, method, url, params):
+        """Check if an API already exists in api_rows"""
+        for existing_method, existing_url, existing_params in self.api_rows:
+            if (existing_method == method and 
+                existing_url == url and 
+                sorted(existing_params) == sorted(params)):
+                return True
+        return False
+
+    def _is_duplicate_workflow(self, workflow_name):
+        """Check if a workflow already exists"""
+        for existing_method, existing_url, existing_params in self.api_rows:
+            if existing_method == workflow_name and existing_url == "" and not existing_params:
+                return True
+        return False
 
     # --- Tab Table Actions ---
     def _refresh_table(self):
@@ -174,6 +214,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         if params is None:
             return
         param_names = [p.strip() for p in params.split(",") if p.strip()]
+        
+        # Check for duplicates if not allowed
+        if not self.allow_duplicates and self._is_duplicate_api(method.strip(), url.strip(), param_names):
+            JOptionPane.showMessageDialog(None, "This API already exists and duplicates are not allowed.")
+            return
+            
         selected_idx = self.api_table.getSelectedRow()
         if selected_idx >= 0 and selected_idx < len(self.filtered_rows):
             # Find the corresponding index in api_rows
@@ -195,12 +241,35 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                     self.api_rows.remove(row)
         self._refresh_table()
 
+    def write_csv(self, file_path, api_rows):   
+        with open(file_path, "wb") as f:  # Change to binary mode
+            writer = csv.writer(f)
+            # Manually encode strings to UTF-8
+            writer.writerow([
+                "SR.NO.", "API", "Parameters",
+                "Attack tried", "Steps/procedure",
+                "Observation", "Status-(Found/Not found)"
+            ])
+            writer.writerow([""] * 7)
+            sr_no = 1
+            for method, url, params in api_rows:
+                filtered_params = [p for p in params if getattr(p, 'getType', lambda: None)() != 2] if params and hasattr(params[0], 'getType') else params
+                if url == "" and not filtered_params:
+                    writer.writerow(["", method] + [""] * 5)
+                    writer.writerow([""] * 7)
+                else:
+                    api_line = "{} {}".format(method, url)
+                    writer.writerow([str(sr_no), api_line, ""] + [""] * 4)
+                    for pname in filtered_params:
+                        writer.writerow(["", "", str(pname)] + [""] * 4)
+                    writer.writerow([""] * 7)
+                    sr_no += 1
+
     def _export_from_tab(self, event):
         if not self.filtered_rows:
             JOptionPane.showMessageDialog(None, "No APIs to export.")
             return
 
-        # Ask user for export format
         options = ["CSV", "cURL"]
         choice = JOptionPane.showOptionDialog(
             None,
@@ -213,7 +282,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             options[0]
         )
 
-        if choice == 0:  # CSV
+        if choice == 0:
             file_chooser = JFileChooser()
             file_chooser.setDialogTitle("Save CSV")
             result = file_chooser.showSaveDialog(None)
@@ -223,28 +292,7 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             if not file_path.endswith(".csv"):
                 file_path += ".csv"
             try:
-                with open(file_path, "wb") as f:
-                    writer = csv.writer(f)
-                    writer.writerow([
-                        "SR.NO.", "API", "Parameters",
-                        "Attack tried", "Steps/procedure",
-                        "Observation", "Status-(Found/Not found)"
-                    ])
-                    writer.writerow([""] * 7)
-                    sr_no = 1
-                    for method, url, params in self.filtered_rows:
-                        # params here should already be filtered, but if not, filter them:
-                        filtered_params = [p for p in params if getattr(p, 'getType', lambda: None)() != 2] if params and hasattr(params[0], 'getType') else params
-                        if url == "" and not filtered_params:  # Workflow row
-                            writer.writerow(["", method, "", "", "", "", ""])
-                            writer.writerow([""] * 7)
-                        else:
-                            api_line = "{} {}".format(method, url)
-                            writer.writerow([str(sr_no), api_line, ""] + [""] * 4)
-                            for pname in filtered_params:
-                                writer.writerow(["", "", pname] + [""] * 4)
-                            writer.writerow([""] * 7)
-                            sr_no += 1
+                self.write_csv(file_path, self.filtered_rows)
                 JOptionPane.showMessageDialog(None, "Exported successfully to:\n" + file_path)
             except Exception as e:
                 JOptionPane.showMessageDialog(None, "Write error:\n" + str(e))
@@ -259,14 +307,14 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             if not file_path.endswith(".txt"):
                 file_path += ".txt"
             try:
-                with open(file_path, "w") as f:
+                with open(file_path, "w") as f:  # Remove encoding parameter
                     for idx, (method, url, params) in enumerate(self.filtered_rows):
-                        if url == "" and not params:  # Workflow row
+                        if url == "" and not params:
                             content = method
                         else:
                             content = "curl -i -s -k -X '{}' '{}'".format(method, url)
-                        f.write(u"####\n{}\n".format(content))
-                    f.write("####\n")  # Only one closing block at the end
+                        f.write("####\n{}\n".format(content))
+                    f.write("####\n")
                 JOptionPane.showMessageDialog(None, "cURL commands exported to: {}".format(file_path))
             except Exception as e:
                 JOptionPane.showMessageDialog(None, "Error exporting to file: {}".format(e))
@@ -278,34 +326,96 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             JOptionPane.showMessageDialog(None, "No HTTP requests selected.")
             return
 
-        # seen = set((row[0], row[1], tuple(row[2])) for row in self.api_rows)
         new_methods = set()
+        added_count = 0
+        skipped_count = 0
+        
         for message in messages:
             try:
-                   req_info = self._helpers.analyzeRequest(message)
-                   url = req_info.getUrl()
-                   method = req_info.getMethod()
-                   params = req_info.getParameters()
-                   param_names = sorted(set(
-    p.getName() for p in params if p.getType() != 2  # 2 = IParameter.PARAM_COOKIE
-))
-                   self.api_rows.append([method, url.toString(), param_names])
-                   new_methods.add(method)
+                req_info = self._helpers.analyzeRequest(message)
+                url = req_info.getUrl()
+                method = req_info.getMethod()
+                params = req_info.getParameters()
+                param_names = sorted(set(
+                    p.getName() for p in params if p.getType() != 2
+                ))
+                
+                # Check for duplicates if not allowed
+                if not self.allow_duplicates and self._is_duplicate_api(method, url.toString(), param_names):
+                    skipped_count += 1
+                    continue
+                    
+                self.api_rows.append([method, url.toString(), param_names])
+                new_methods.add(method)
+                added_count += 1
+                
             except Exception as e:
                 self._callbacks.printOutput("Error: " + str(e))
+                
         if new_methods:
             self.methods.update(new_methods)
             self.method_filter.removeAllItems()
             self.method_filter.addItem("ALL")
             for m in sorted(self.methods):
                 self.method_filter.addItem(m)
+                
         self._refresh_table()
+        
+        # Show results summary
+        if skipped_count > 0:
+            JOptionPane.showMessageDialog(None, 
+                "Added {} APIs to tab.\nSkipped {} duplicates.".format(added_count, skipped_count))
+        else:
+            JOptionPane.showMessageDialog(None, "Added {} APIs to tab.".format(added_count))
 
     def export_to_csv(self, event):
         messages = self._invocation.getSelectedMessages()
         if not messages:
             JOptionPane.showMessageDialog(None, "No HTTP requests selected.")
             return
+
+        # Ask user about duplicate handling for this export
+        options = ["Include duplicates", "Remove duplicates"]
+        choice = JOptionPane.showOptionDialog(
+            None,
+            "How to handle duplicate APIs?",
+            "Duplicate Handling",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            None,
+            options,
+            options[0] if self.allow_duplicates else options[1]
+        )
+        
+        include_duplicates = (choice == 0)
+
+        api_rows = []
+        seen_apis = set()
+        added_count = 0
+        skipped_count = 0
+        
+        for message in messages:
+            try:
+                req_info = self._helpers.analyzeRequest(message)
+                url = req_info.getUrl()
+                method = req_info.getMethod()
+                params = req_info.getParameters()
+                param_names = sorted(set(p.getName() for p in params if p.getType() != 2))
+                
+                api_key = (method, url.toString(), tuple(sorted(param_names)))
+                
+                # Check for duplicates if not including them
+                if not include_duplicates:
+                    if api_key in seen_apis:
+                        skipped_count += 1
+                        continue
+                    seen_apis.add(api_key)
+                
+                api_rows.append([method, url.toString(), param_names])
+                added_count += 1
+                
+            except Exception as e:
+                self._callbacks.printOutput("Error: " + str(e))
 
         file_chooser = JFileChooser()
         file_chooser.setDialogTitle("Save CSV")
@@ -317,44 +427,17 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         if not file_path.endswith(".csv"):
             file_path += ".csv"
 
-        rows = []
-        rows.append([
-            "SR.NO.", "API", "Parameters",
-            "Attack tried", "Steps/procedure",
-            "Observation", "Status-(Found/Not found)"
-        ])
-        rows.append([""] * 7)
-
-        sr_no = 1
-        for message in messages:
-            try:
-                req_info = self._helpers.analyzeRequest(message)
-                url = req_info.getUrl()
-                method = req_info.getMethod()
-                params = req_info.getParameters()
-
-                api_line = "{} {}".format(method, url.toString())
-                param_names = sorted(set(p.getName() for p in params if p.getType() != 2))  # Exclude cookies
-
-                rows.append([str(sr_no), api_line, ""] + [""] * 4)
-                for pname in param_names:
-                    rows.append(["", "", pname] + [""] * 4)
-                rows.append([""] * 7)
-                sr_no += 1
-
-            except Exception as e:
-                self._callbacks.printOutput("Error: " + str(e))
-
         try:
-            with codecs.open(file_path, "w", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                for row in rows:
-                    writer.writerow([unicode(col).encode("utf-8") if isinstance(col, unicode) else str(col) for col in row])
-            JOptionPane.showMessageDialog(None, "Exported successfully to:\n" + file_path)
+            self.write_csv(file_path, api_rows)
+            if skipped_count > 0:
+                JOptionPane.showMessageDialog(None, 
+                    "Exported {} APIs to CSV.\nSkipped {} duplicates.".format(added_count, skipped_count))
+            else:
+                JOptionPane.showMessageDialog(None, "Exported {} APIs to CSV.".format(added_count))
         except Exception as e:
             JOptionPane.showMessageDialog(None, "Write error:\n" + str(e))
 
-    # --- cURL Export Feature (from curlscript.py) ---
+    # --- cURL Export Feature ---
     def convert_to_curl(self, method, url, headers, body):
         curl_parts = ["curl -i -s -k"]
         curl_parts.append("-X $'{0}'".format(method))
@@ -363,11 +446,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         for header in headers:
             if ": " in header:
                 key, value = header.split(": ", 1)
-                curl_parts.append("-H $'{0}: {1}'".format(key, value))
+                if key.lower() not in ['content-length', 'host', 'connection']:
+                    escaped_value = value.replace("'", "'\"'\"'")
+                    curl_parts.append("-H '{}: {}'".format(key, escaped_value))
                 if key.lower() == "content-type":
                     content_type = value.strip().lower()
 
-        # Skip multipart/form-data requests
         if content_type and "multipart/form-data" in content_type:
             return None
 
@@ -390,7 +474,26 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             JOptionPane.showMessageDialog(None, "No HTTP requests selected.")
             return
 
+        # Ask user about duplicate handling for this export
+        options = ["Include duplicates", "Remove duplicates"]
+        choice = JOptionPane.showOptionDialog(
+            None,
+            "How to handle duplicate APIs?",
+            "Duplicate Handling",
+            JOptionPane.DEFAULT_OPTION,
+            JOptionPane.QUESTION_MESSAGE,
+            None,
+            options,
+            options[0] if self.allow_duplicates else options[1]
+        )
+        
+        include_duplicates = (choice == 0)
+
         cURL_commands = []
+        seen_commands = set()
+        added_count = 0
+        skipped_count = 0
+        
         for message in http_traffic:
             try:
                 request = message.getRequest()
@@ -398,14 +501,23 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                     continue
 
                 request_info = self._helpers.analyzeRequest(message)
-                headers = request_info.getHeaders()
-                body = self._helpers.bytesToString(request)[request_info.getBodyOffset():]
+                headers = list(request_info.getHeaders())
+                body_bytes = request[request_info.getBodyOffset():]
+                body = self._helpers.bytesToString(body_bytes) if body_bytes else ""
                 url = str(request_info.getUrl())
                 method = request_info.getMethod()
 
                 curl_command = self.convert_to_curl(method, url, headers, body)
-                if curl_command:  # Skip if curl_command is None (i.e., multipart)
+                if curl_command:
+                    # Check for duplicates if not including them
+                    if not include_duplicates:
+                        if curl_command in seen_commands:
+                            skipped_count += 1
+                            continue
+                        seen_commands.add(curl_command)
+                    
                     cURL_commands.append(curl_command)
+                    added_count += 1
 
             except Exception as e:
                 self._callbacks.printOutput("Error processing request: {}".format(e))
@@ -423,16 +535,25 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                         f.write(curl + "\n")
                     f.write("####\n")
 
-                JOptionPane.showMessageDialog(None, "cURL commands exported to: {}".format(file_path))
+                if skipped_count > 0:
+                    JOptionPane.showMessageDialog(None, 
+                        "Exported {} cURL commands.\nSkipped {} duplicates.".format(added_count, skipped_count))
+                else:
+                    JOptionPane.showMessageDialog(None, "Exported {} cURL commands.".format(added_count))
             except Exception as e:
                 JOptionPane.showMessageDialog(None, "Error exporting to file: {}".format(e))
+        else:
+            JOptionPane.showMessageDialog(None, "No cURL commands generated (possibly due to multipart requests).")
 
     def get_output_file_path(self):
         chooser = JFileChooser()
         chooser.setDialogTitle("Save cURL commands to file")
         result = chooser.showSaveDialog(None)
         if result == JFileChooser.APPROVE_OPTION:
-            return chooser.getSelectedFile().getAbsolutePath()
+            file_path = chooser.getSelectedFile().getAbsolutePath()
+            if not file_path.endswith(".txt"):
+                file_path += ".txt"
+            return file_path
         else:
             return None
 
@@ -440,6 +561,12 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         workflow = JOptionPane.showInputDialog(None, "Enter Workflow Name:", "Add Workflow", JOptionPane.PLAIN_MESSAGE)
         if workflow is None or not workflow.strip():
             return
+            
+        # Check for duplicate workflow if not allowed
+        if not self.allow_duplicates and self._is_duplicate_workflow(workflow.strip()):
+            JOptionPane.showMessageDialog(None, "This workflow already exists and duplicates are not allowed.")
+            return
+            
         selected_idx = self.api_table.getSelectedRow()
         if selected_idx >= 0 and selected_idx < len(self.filtered_rows):
             ref_row = self.filtered_rows[selected_idx]
