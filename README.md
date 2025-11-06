@@ -46,7 +46,7 @@ API & Workflow Manager is a Burp Suite extension that provides centralized manag
 ## 🖼️ Interface Overview
 
 ### 🔹 API Management Tab
-![API Management Tab](assets/api_tab.png)
+([assets/api_tab.png](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/apimanagementtabhome.png))
 
 Manage your captured APIs efficiently:
 - **View all collected APIs.**
