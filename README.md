@@ -57,7 +57,7 @@ Manage your captured APIs efficiently:
 ---
 
 ### 🔹 Context Menu Integration
-![Context Menu](assets/context_menu.png)
+![assets/sendtoapimangement.png](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/sendtoapimangement.png)
 
 Right-click any request in **Proxy**, **Repeater**, or **HTTP history**, and choose:
 - **Send APIs to Management Tab**
@@ -67,12 +67,27 @@ Right-click any request in **Proxy**, **Repeater**, or **HTTP history**, and cho
 ---
 
 ### 🔹 CSV Export Example
-![CSV Export Example](assets/csv_export.png)
+![assets/exportformats.png](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/exportformats.png)
+![assests/csvsuccess](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/csvsuccess.png)
 
 The exported CSV file includes structured columns for:
 - **API & parameters**  
 - **Attack steps & observations**  
 - **Manual test tracking (Found/Not found)**
+
+![assets/examplecsv](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/examplecsv.png)
+
+---
+### 🔹 cUrl Export Example
+
+![assets/savecurl](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/savecurl.png)
+![assets/examplecurl](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/examplecurl.png)
+
+---
+### 🔹 Duplicate Filtering to avoid noise
+
+![assets/duplicatehandeling](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/duplicatehandeling.png)
+![assets/withoutduplicate](https://github.com/omkaryepre/API_Workflow_Manager/blob/main/assests/withoutduplicate.png)
 
 ---
 
