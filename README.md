@@ -1,10 +1,18 @@
-<div align="center">
+<div align="left">
 
-# 🔐 API & Workflow Manager — Burp Suite Extension
+**🔐 API & Workflow Manager — Burp Suite Extension**
 
-**A comprehensive Burp Suite extension designed to streamline API testing workflows by providing centralized management, organization, and export capabilities for HTTP requests.**
+API & Workflow Manager is a Burp Suite extension that provides centralized management and organization for API endpoints during security testing. It allows security professionals to collect, categorize, and export HTTP requests with workflow labels, enabling structured testing methodologies and comprehensive documentation through CSV and cURL exports.
 
-![API & Workflow Manager](https://via.placeholder.com/800x400/2D3748/FFFFFF?text=API+%26+Workflow+Manager)
+**Key capabilities:**
+
+- Collect and organize APIs from Proxy/Repeater 
+- Add workflow markers to structure testing phases 
+- Filter and manage endpoints by HTTP method    
+- Export to manual testing sheets or cURL commands 
+- Control duplicate entries for clean inventories 
+
+**Perfect for API security testing where organized workflow management and documentation are essential.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
 [![Burp Suite](https://img.shields.io/badge/Burp_Suite-Professional-orange)](#)
@@ -160,12 +168,6 @@ burp_export_curl.txt | while read cmd; do
     [ "$cmd" != "####" ] && eval "$cmd"
 done
 ```
-## 💾 Export Settings
-
-Context Menu Exports: Prompt for duplicate handling
-Filtered Exports: Respect method filters
-File Encoding: UTF-8 for CSV exports
-
 ---
 
 ## 🔧 Technical Details
