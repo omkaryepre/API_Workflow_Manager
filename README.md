@@ -1,34 +1,37 @@
-# 🔍 BurpSuite Extension — API & Workflow Manager
+<div align="center">
 
-![BurpSuite Extension Banner](assets/banner.png)
+# 🔐 API & Workflow Manager — Burp Suite Extension
 
-> **An advanced BurpSuite extension** for managing, organizing, and exporting API endpoints & workflows discovered during penetration testing.
+**A comprehensive Burp Suite extension designed to streamline API testing workflows by providing centralized management, organization, and export capabilities for HTTP requests.**
 
----
+![API & Workflow Manager](https://via.placeholder.com/800x400/2D3748/FFFFFF?text=API+%26+Workflow+Manager)
 
-## 🚀 Overview
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Burp Suite](https://img.shields.io/badge/Burp_Suite-Professional-orange)](#)
+[![Python](https://img.shields.io/badge/Python-2.7%20(Jython)-yellow)](#)
+[![Version](https://img.shields.io/badge/Version-1.0-green)](#)
 
-The **API & Workflow Manager** extension provides BurpSuite users with a clean, interactive interface to:
-- Capture API endpoints directly from Burp’s proxy or repeater.
-- Manage and reorder APIs for better workflow organization.
-- Filter APIs by HTTP method.
-- Export APIs and cURL commands to CSV or TXT for manual testing documentation.
-
-This extension is ideal for **penetration testers**, **API security auditors**, and **red teamers** who want to streamline API mapping and workflow documentation during engagements.
+</div>
 
 ---
 
-## 🧩 Key Features
+## 🚀 Features
 
-| Feature | Description |
-|----------|-------------|
-| **API Capture** | Right-click any HTTP request and send it to the **API Management** tab. |
-| **Workflow Management** | Add workflows or logical test sequences to visually organize attack chains. |
-| **Filtering** | Filter captured APIs by HTTP method (GET, POST, etc.). |
-| **Reordering** | Move APIs up or down to maintain testing sequences. |
-| **Duplicate Control** | Option to allow or block duplicate API entries. |
-| **Export Options** | Export filtered APIs as a formatted CSV sheet or as ready-to-use cURL commands. |
-| **Manual Testing Sheet** | Generate CSV-based "Manual Test Sheets" for structured vulnerability reporting. |
+### 📋 Core Management
+- **Centralized API Management** — Collect and organize HTTP requests in a dedicated tab  
+- **Smart Filtering** — Filter APIs by HTTP methods (GET, POST, PUT, DELETE, etc.)  
+- **Duplicate Control** — Configurable duplicate detection to maintain clean API inventories  
+- **Visual Workflow Creation** — Add workflow markers to structure testing processes  
+
+### ⚡ Quick Actions
+- **Context Menu Integration** — Direct access from Proxy/Repeater  
+- **Drag & Drop Reordering** — Intuitive UI for organizing API sequences  
+- **Bulk Operations** — Multi-select support for efficient management  
+
+### 📤 Export Capabilities
+- **CSV Manual Sheets** — Generate documentation for manual testing  
+- **cURL Commands** — Convert requests to cURL format for external testing  
+- **Flexible Formats** — Multiple export options with duplicate handling  
 
 ---
 
@@ -38,10 +41,10 @@ This extension is ideal for **penetration testers**, **API security auditors**, 
 ![API Management Tab](assets/api_tab.png)
 
 Manage your captured APIs efficiently:
-- View all collected APIs.
-- Filter by HTTP method.
-- Reorder or remove entries.
-- Add new APIs or workflows manually.
+- **View all collected APIs.**
+- **Filter by HTTP method.**
+- **Reorder or remove entries.**
+- **Add new APIs or workflows manually.**
 
 ---
 
@@ -59,20 +62,136 @@ Right-click any request in **Proxy**, **Repeater**, or **HTTP history**, and cho
 ![CSV Export Example](assets/csv_export.png)
 
 The exported CSV file includes structured columns for:
-- API & parameters  
-- Attack steps & observations  
-- Manual test tracking (Found/Not found)
+- **API & parameters**  
+- **Attack steps & observations**  
+- **Manual test tracking (Found/Not found)**
 
 ---
 
-## ⚙️ Installation
+## 🛠️ Installation
 
-### Prerequisites
-- **BurpSuite Professional or Community Edition**
-- **Jython 2.7.x** configured in BurpSuite (`Extender > Options > Python Environment`)
+### 🧩 Prerequisites
+- **Burp Suite Professional**
+- **Jython 2.7+** configured in Burp Suite
 
-### Steps
-1. Download the extension source:
-   ```bash
-   git clone https://github.com/<yourusername>/burp-api-workflow-manager.git
-   cd burp-api-workflow-manager
+### 📦 Installation Steps
+```bash
+# 1. Clone the repository
+git clone https://github.com/yourusername/burp-api-workflow-manager.git
+```
+### 1. Configure Jython in Burp Suite
+
+Go to Extender → Options
+
+Set Python environment to your Jython standalone JAR
+
+Ensure Jython 2.7+ is properly configured
+
+### 2. Load the Extension
+
+Open Burp Suite → Extender → Extensions
+
+Click Add → Python as extension type
+
+Browse and select the extension file
+
+Click Next to load
+
+### 3. Verify Installation
+
+Check for the “API Management” tab
+
+Confirm context menu options in Proxy/Repeater
+
+---
+
+## 📖 Usage Guide
+➕ Adding APIs to Management
+
+### From Context Menu: 
+Right-click request → Extensions → Send APIs to Management Tab
+
+### Manual Addition:
+
+-Use the Add API button in the management tab
+-Enter Method, URL, and Parameters manually
+
+| Feature               | Description                             | Shortcut             |
+| --------------------- | --------------------------------------- | -------------------- |
+| **Filtering**         | Filter by HTTP method                   | Dropdown             |
+| **Reordering**        | Move APIs up/down                       | Move Up/Down buttons |
+| **Workflows**         | Add workflow markers for testing phases | Add Workflow button  |
+| **Duplicate Control** | Toggle duplicate prevention             | Checkbox (top panel) |
+
+---
+
+## 📤 Exporting Data
+### CSV Export Format
+```CSV
+SR.NO.,API,Parameters,Attack tried,Steps/procedure,Observation,Status
+1,GET /api/users,"id,name",,,,
+```
+### cURL Export Example
+``` bash
+####
+curl -i -s -k -X 'GET' -H 'Authorization: Bearer token' 'https://api.example.com/users'
+####
+```
+
+---
+
+## 🎯 Use Cases
+**🧪 API Security Testing**
+
+-Comprehensive documentation to track testing progress
+-Structured workflows for repeatable test phases
+-Team collaboration via organized inventories
+
+**🧍‍♂️ Manual Testing Support**
+1. Collect all endpoints via Proxy
+2. Organize by functionality in management tab
+3. Export to CSV for manual testing documentation
+4. Use cURL exports for automated tool integration
+
+### 🔗 Tool Integration
+```bash
+# Export cURL commands and pipe to external tools
+burp_export_curl.txt | while read cmd; do
+    [ "$cmd" != "####" ] && eval "$cmd"
+done
+```
+## 💾 Export Settings
+
+Context Menu Exports: Prompt for duplicate handling
+Filtered Exports: Respect method filters
+File Encoding: UTF-8 for CSV exports
+
+---
+
+## 🔧 Technical Details
+**Supported HTTP Methods**
+
+**Standard**: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+
+**Custom**: Any HTTP method supported by Burp Suite
+
+| Format  | Encoding       | Use Case                     |
+| ------- | -------------- | ---------------------------- |
+| **CSV** | UTF-8          | Manual testing documentation |
+| **TXT** | System default | cURL command export          |
+
+### ❗ Troubleshooting
+
+| Issue                     | Solution                                |
+| ------------------------- | --------------------------------------- |
+| **Extension not loading** | Verify Jython configuration in Burp     |
+| **Missing context menu**  | Restart Burp or reload extension        |
+| **Export failures**       | Check file permissions and disk space   |
+| **Performance issues**    | Reduce number of APIs in management tab |
+
+---
+
+## 📜 License
+
+This project is licensed under the MIT License — see the LICENSE
+
