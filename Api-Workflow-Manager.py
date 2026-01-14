@@ -166,6 +166,26 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             if existing_method == workflow_name and existing_url == "" and not existing_params:
                 return True
         return False
+    
+
+    # Safety helpers
+    def _escape_single_quotes(self, s):
+        """Escape single quotes for safe insertion into single-quoted shell fragments."""
+        if s is None:
+            return s
+        try:
+            return s.replace("'", "'\"'\"'")
+        except Exception:
+            return s
+
+    def _sanitize_csv_cell(self, value):
+        """Mitigate CSV formula injection by prefixing dangerous leading chars with a single quote."""
+        if value is None:
+            return value
+        s = str(value)
+        if s and s[0] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + s
+        return s
 
     # --- Tab Table Actions ---
     def _refresh_table(self):
@@ -242,9 +262,9 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         self._refresh_table()
 
     def write_csv(self, file_path, api_rows):   
-        with open(file_path, "wb") as f:  # Change to binary mode
+        with open(file_path, "wb") as f:  # Change to binary mode (Jython compatibility)
             writer = csv.writer(f)
-            # Manually encode strings to UTF-8
+
             writer.writerow([
                 "SR.NO.", "API", "Parameters",
                 "Attack tried", "Steps/procedure",
@@ -253,15 +273,22 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
             writer.writerow([""] * 7)
             sr_no = 1
             for method, url, params in api_rows:
+                # filter out param types that are not relevant (preserve previous behavior)
                 filtered_params = [p for p in params if getattr(p, 'getType', lambda: None)() != 2] if params and hasattr(params[0], 'getType') else params
+
+                # Sanitize CSV cells to mitigate formula injection
                 if url == "" and not filtered_params:
-                    writer.writerow(["", method] + [""] * 5)
+                    safe_method = self._sanitize_csv_cell(method)
+                    writer.writerow(["", safe_method] + [""] * 5)
                     writer.writerow([""] * 7)
                 else:
-                    api_line = "{} {}".format(method, url)
+                    safe_method = self._sanitize_csv_cell(method)
+                    safe_url = self._sanitize_csv_cell(url)
+                    api_line = "{} {}".format(safe_method, safe_url).strip()
                     writer.writerow([str(sr_no), api_line, ""] + [""] * 4)
                     for pname in filtered_params:
-                        writer.writerow(["", "", str(pname)] + [""] * 4)
+                        safe_p = self._sanitize_csv_cell(pname)
+                        writer.writerow(["", "", str(safe_p)] + [""] * 4)
                     writer.writerow([""] * 7)
                     sr_no += 1
 
@@ -310,9 +337,13 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
                 with open(file_path, "w") as f:  # Remove encoding parameter
                     for idx, (method, url, params) in enumerate(self.filtered_rows):
                         if url == "" and not params:
-                            content = method
+                            # Sanitize method for safe output
+                            safe_method = self._escape_single_quotes(method)
+                            content = safe_method
                         else:
-                            content = "curl -i -s -k -X '{}' '{}'".format(method, url)
+                            esc_method = self._escape_single_quotes(method)
+                            esc_url = self._escape_single_quotes(url)
+                            content = "curl -i -s -k -X '{}' '{}'".format(esc_method, esc_url)
                         f.write("####\n{}\n".format(content))
                     f.write("####\n")
                 JOptionPane.showMessageDialog(None, "cURL commands exported to: {}".format(file_path))
@@ -440,14 +471,18 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
     # --- cURL Export Feature ---
     def convert_to_curl(self, method, url, headers, body):
         curl_parts = ["curl -i -s -k"]
-        curl_parts.append("-X $'{0}'".format(method))
+
+        escaped_method = self._escape_single_quotes(method)
+        escaped_url = self._escape_single_quotes(url)
+
+        curl_parts.append("-X '{}'".format(escaped_method))
 
         content_type = None
         for header in headers:
             if ": " in header:
                 key, value = header.split(": ", 1)
                 if key.lower() not in ['content-length', 'host', 'connection']:
-                    escaped_value = value.replace("'", "'\"'\"'")
+                    escaped_value = self._escape_single_quotes(value)
                     curl_parts.append("-H '{}: {}'".format(key, escaped_value))
                 if key.lower() == "content-type":
                     content_type = value.strip().lower()
@@ -455,17 +490,11 @@ class BurpExtender(IBurpExtender, IContextMenuFactory, ITab):
         if content_type and "multipart/form-data" in content_type:
             return None
 
-        if body and len(body) > 0:
-            try:
-                sanitized_body = body.replace("'", "'\"'\"'")
-                if content_type and "application/json" in content_type:
-                    curl_parts.append("--data $'{0}'".format(sanitized_body))
-                else:
-                    curl_parts.append("--data-binary $'{0}'".format(sanitized_body))
-            except Exception as e:
-                self._callbacks.printOutput("Body processing error: {}".format(e))
+        if body:
+            sanitized_body = self._escape_single_quotes(body)
+            curl_parts.append("--data '{}'".format(sanitized_body))
 
-        curl_parts.append("$'{0}'".format(url))
+        curl_parts.append("'{}'".format(escaped_url))
         return " ".join(curl_parts)
 
     def export_curl_to_file(self, event):
